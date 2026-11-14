@@ -31,12 +31,4 @@ GRN=$'\033[32m'; RED=$'\033[31m'; NC=$'\033[0m'
 live="$ROM_TREE/vendor/bin/hw/vendor.oplus.hardware.stability.oplus_project-V1-service"
 install -m 0755 "$SRC" "$live"
 echo -e "${GRN}staged${NC} $live"
-
-# The .fsv_meta sidecar keeps the old content in play when a file is replaced
-# (init runs fsverity_init --load-verified-keys), so drop it alongside.
-meta="$live.fsv_meta"
-if [[ -f "$meta" ]]; then
-    rm -f "$meta"
-    echo -e "${GRN}removed stale sidecar${NC} $meta"
-fi
 echo "done"
