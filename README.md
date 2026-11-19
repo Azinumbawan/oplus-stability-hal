@@ -4,6 +4,11 @@ A pure-Rust implementation of the OPlus stability AIDL HAL service.
 
 ## What it does
 
+Functionally, the HAL gives the framework one place to read device stability,
+boot, power and aging data, and to change a small set of boot and power flags.
+It collects those values from kernel nodes and system properties so callers do
+not have to know the platform-specific paths.
+
 `OplusStability` registers
 `vendor.oplus.hardware.stability.oplus_project.IOplusProject` (version 1) with
 the Android service manager and serves its 33 methods plus the reserved
