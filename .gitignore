@@ -1,1 +1,15 @@
+# Rust build output
 /rust/target/
+target/
+
+# Compiled objects and libraries
+*.o
+*.rlib
+*.rmeta
+*.so
+*.a
+
+# Scratch and backup files
+*.bak
+*.orig
+*~

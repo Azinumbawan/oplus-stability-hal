@@ -1,11 +1,10 @@
 // The OplusProject HAL core: every IOplusProject method against its node set.
 //
-// Primary candidate is the OPlus-native path the shipped HAL read; the
-// fallback is this board's MTK/Transsion equivalent. The first candidate
-// that yields data (reads) or accepts the write (writes) wins. Behaviour is
-// translated from the C++ reconstruction, which recorded the evidence for
-// every fallback in `re/kernel_nodes_equiv.md` (kept in the OOS root's
-// history).
+// Each method has an ordered list of candidate kernel nodes and system
+// properties. The first candidate that yields data (reads) or accepts the
+// write (writes) wins. Only node and property access lives here, so the
+// adapters are unit-testable on a host with fixture files and an in-memory
+// property store.
 
 use crate::io_shim;
 
@@ -41,7 +40,7 @@ pub fn prop_get_any(names: &[&str]) -> String {
     String::new()
 }
 
-/// Parses a leading numeric prefix the way the shipped C++ strtol does:
+/// Parses a leading numeric prefix with C-style `strtol` semantics:
 /// "5.10.198 (gcc)" -> 5, "42 units" -> 42, "" -> None. Rust's str::parse
 /// rejects these because it wants the whole string.
 fn parse_i32_prefix(rest: &str) -> Option<i32> {

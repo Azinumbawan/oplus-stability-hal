@@ -1,27 +1,17 @@
 #!/bin/bash
-# Stage the Rust port of the OPlus OplusProject (stability) HAL into the
-# unpacked vendor tree.
+# Stage the built stability HAL service into an unpacked Android vendor tree.
 #
-# Staged:
-#   erofs/vendor/bin/hw/vendor.oplus.hardware.stability.oplus_project-V1-service
+# The service is installed under vendor/bin/hw/ at the path referenced by the
+# HAL's init rc and VINTF fragment. That path is already covered by the tree's
+# fs_config and file_contexts, so nothing needs regenerating.
 #
-# The init rc
-# (erofs/vendor/etc/init/vendor.oplus.hardware.stability.oplus_project-V1-service.rc,
-# class hal, user system, group system) and the VINTF fragment
-# (erofs/vendor/etc/vintf/manifest/manifest_oplus_stability_project_aidl.xml)
-# point at this same path and stay unchanged. The genuine shipped binary stays
-# in the OOS root's history; the C++ reconstruction it replaced is gone.
-#
-# The binary lands at the same path as the build it replaces, so the existing
-# fs_config / file_contexts entries still apply and nothing is regenerated
-# (that only happens at repack time).
-#
-# This only touches files in the unpacked tree. It does NOT repack, does NOT
-# flash, and does NOT touch fs_config or file_contexts.
+# This only copies a file. It does not build or flash images, and does not
+# touch fs_config or file_contexts.
 set -euo pipefail
 
+: "${ROM_TREE:?set ROM_TREE to the root of the unpacked vendor tree}"
+
 W=$(cd "$(dirname "$0")/.." && pwd)
-ROM_TREE=${ROM_TREE:-/mnt/project/RomTools/ROM_WORKDIR/oos/erofs}
 SRC="$W/rust/target/aarch64-linux-android/release/vendor.oplus.hardware.stability.oplus_project-V1-service"
 
 GRN=$'\033[32m'; RED=$'\033[31m'; NC=$'\033[0m'

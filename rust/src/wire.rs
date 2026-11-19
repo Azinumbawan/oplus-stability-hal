@@ -1,15 +1,12 @@
 // Raw FFI to libbinder_ndk (the stable C API) and parcel helpers.
 //
-// The AIDL transport is implemented by hand instead of through generated C++
-// code: the interface is fixed (vendor.oplus.hardware.stability.oplus_project.
-// IOplusProject, version 1, hash
-// 87177176cb812e29538fd78965a31f1f545d2baa, 33 methods numbered 1..33 plus the
-// reserved pair getInterfaceVersion@0xffffff / getInterfaceHash@0xfffffe that
-// this ROM's Java stub uses), so the wire format is fully known and the NDK
-// C API is a stable C ABI that Rust can bind directly.
+// The AIDL transport binds that C API directly: the interface is fixed
+// (vendor.oplus.hardware.stability.oplus_project.IOplusProject, version 1,
+// hash 87177176cb812e29538fd78965a31f1f545d2baa, 33 methods numbered 1..33
+// plus the reserved getInterfaceVersion@0xffffff and getInterfaceHash@0xfffffe
+// transactions), so the wire format is fully known.
 //
-// Wire format (matches what the generated ndk backend and the framework's
-// Java stub produce):
+// Wire format:
 //   * incoming transactions arrive with the interface token already consumed,
 //   * every reply starts with a status header (an int32 exception code, 0 for
 //     OK) followed by the return value in declaration order,

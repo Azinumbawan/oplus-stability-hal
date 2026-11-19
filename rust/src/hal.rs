@@ -2,11 +2,10 @@
 // IOplusProject methods plus the reserved getInterfaceVersion /
 // getInterfaceHash pair.
 //
-// Method order is the AIDL transaction-code order (1..33 in declaration
-// order, verified against the shipped binary and the Java stub). The reply
-// for every method is a status header (OK) followed by the method's return
-// value; in-parameters are read from the incoming parcel in declaration
-// order. The interface token is consumed by libbinder before onTransact.
+// Method order follows the AIDL declaration order (transaction codes 1..33).
+// Every reply is a status header (OK) followed by the method's return value;
+// in-parameters are read from the incoming parcel in declaration order. The
+// interface token is consumed by libbinder before onTransact.
 
 use std::ffi::c_void;
 
@@ -105,8 +104,8 @@ pub unsafe extern "C" fn on_transact(
         TRANSACTION_GET_INTERFACE_VERSION => i32_method(out_parcel, INTERFACE_VERSION),
         TRANSACTION_GET_INTERFACE_HASH => string_method(out_parcel, INTERFACE_HASH.to_string()),
         _ => {
-            // The shipped BnXxx returns UNKNOWN_TRANSACTION for codes outside
-            // the interface; clients use it to walk the interface chain.
+            // Codes outside the interface return UNKNOWN_TRANSACTION; clients
+            // use it to walk the interface chain.
             return -31;
         }
     };

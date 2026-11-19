@@ -1,4 +1,4 @@
-// The cross-platform half of the OplusProject HAL port.
+// The cross-platform half of the OplusProject HAL implementation.
 //
 // Every IOplusProject method against its node set lives here so the adapter
 // behaviour is unit-testable on the host (see core.rs). The binder-facing

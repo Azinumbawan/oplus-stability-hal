@@ -8,8 +8,8 @@ edition = "2021"
 name = "oplus_project_service"
 path = "src/lib.rs"
 
-# bin: the Android AIDL HAL binary. The shipped artifact name has dots, so
-# the build wraps the output (see ../../scripts/build_rust.sh).
+# bin: the Android AIDL HAL binary. The installed service file name contains
+# dots, so the build wraps the output (see ../../scripts/build_rust.sh).
 [[bin]]
 name = "oplus_project_service"
 path = "src/bin/oplus_project_service.rs"

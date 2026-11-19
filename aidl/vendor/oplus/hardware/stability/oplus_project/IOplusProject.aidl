@@ -1,13 +1,6 @@
-// Reconstructed from vendor.oplus.hardware.stability.oplus_project-V1-service
-// and vendor.oplus.hardware.stability.oplus_project-V1-ndk_platform.so.
-//
-// Method order is the exact AIDL transaction-code order (1..32) extracted from
-// the BpOplusProject transact() calls in the NDK backend, plus transaction 33
-// (get_dram_freq) which the device's own Java client declares
-// (IOplusProject$Stub$Proxy: `const/16 v3, #int 33` + Parcel.readString())
-// but the shipped native HAL does not implement. Do NOT reorder: AIDL
-// assigns transaction codes by declaration order, so reordering breaks wire
-// compatibility with the shipped HAL and with any prebuilt client.
+// Method order is load-bearing: AIDL assigns transaction codes by declaration
+// order (1..33 here). Do not reorder or insert methods; that would break wire
+// compatibility with existing clients.
 package vendor.oplus.hardware.stability.oplus_project;
 
 @VintfStability

@@ -1,7 +1,6 @@
-// OplusProject HAL service entry point (Rust port).
+// OplusProject HAL service entry point.
 //
-// Startup recovered from the shipped binary and its init rc
-// (erofs/vendor/etc/init/vendor.oplus.hardware.stability.oplus_project-V1-service.rc):
+// Startup sequence:
 //
 //   ABinderProcess_startThreadPool();
 //   name   = "vendor.oplus.hardware.stability.oplus_project.IOplusProject/default";
@@ -9,8 +8,7 @@
 //   ABinderProcess_joinThreadPool();
 //
 // The log tag is "OplusStabilityHAL". OPLUS_PROJECT_INSTANCE overrides the
-// instance suffix so a rebuilt HAL can register beside the shipped one for
-// A/B comparison; empty/unset keeps "/default".
+// instance suffix; empty or unset keeps "/default".
 
 #[path = "../wire.rs"]
 mod wire;
