@@ -36,6 +36,10 @@ fixture files and an in-memory property store.
   the `AServiceManager_*` and `ABinderProcess_*` entry points used by the
   service.
 
+## Prebuilt
+
+[Get Prebuilt](https://github.com/Xia-s-Projekt/oplus-stability-hal/releases/latest) — prebuilt AArch64 service binary.
+
 ## Build
 
 Host unit tests and the cross-compiled service are produced by one script:
