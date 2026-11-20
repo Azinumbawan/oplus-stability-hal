@@ -1,144 +1,160 @@
-// The OplusProject HAL service: the onTransact dispatch for all 33
-// IOplusProject methods plus the reserved getInterfaceVersion /
-// getInterfaceHash pair.
-//
-// Method order follows the AIDL declaration order (transaction codes 1..33).
-// Every reply is a status header (OK) followed by the method's return value;
-// in-parameters are read from the incoming parcel in declaration order. The
-// interface token is consumed by libbinder before onTransact.
-
-use std::ffi::c_void;
+// ColorOS IOplusProject V3. Decode the entire request before any node access.
 
 use crate::wire::*;
-
-use oplus_project_service::core;
-
-pub const LOG_TAG: &str = "OplusStabilityHAL";
-
-pub const DESCRIPTOR: &str = "vendor.oplus.hardware.stability.oplus_project.IOplusProject";
-pub const INTERFACE_HASH: &str = "87177176cb812e29538fd78965a31f1f545d2baa";
-pub const INTERFACE_VERSION: i32 = 1;
-
-/// The service state. IOplusProject keeps no cross-call state: every method
-/// is a node read or write.
-pub struct Service;
+use oplus_project_service::core::{self, Error, IdentityField, Project};
+pub use oplus_project_service::protocol::{DESCRIPTOR, INTERFACE_HASH, INTERFACE_VERSION};
+use std::ffi::c_void;
+pub const LOG_TAG: &str = "OplusProjectHAL";
 
 pub unsafe extern "C" fn on_create(_args: *mut c_void) -> *mut c_void {
-    let svc = Box::new(Service);
-    Box::into_raw(svc) as *mut c_void
+    Box::into_raw(Box::new(Project::new())).cast()
 }
 
-pub unsafe extern "C" fn on_destroy(user_data: *mut c_void) {
-    if !user_data.is_null() {
-        drop(Box::from_raw(user_data as *mut Service));
+pub unsafe extern "C" fn on_destroy(data: *mut c_void) {
+    if !data.is_null() {
+        drop(Box::from_raw(data.cast::<Project>()));
     }
+}
+
+enum Args {
+    None,
+    Int(i32),
+    Text(String),
+    Aging(i32, Vec<i32>, i32),
+    Theia(i32, String),
+}
+
+fn decode(code: u32, input: *const AParcel) -> Result<Args, i32> {
+    let args = match code {
+        9..=11 | 26 | 27 => Args::Int(read_i32(input)?),
+        28 => Args::Aging(read_i32(input)?, read_i32_array(input)?, read_i32(input)?),
+        29..=31 | 35 => Args::Text(read_string(input)?),
+        32 => Args::Theia(read_i32(input)?, read_string(input)?),
+        1..=35 | TRANSACTION_GET_INTERFACE_VERSION | TRANSACTION_GET_INTERFACE_HASH => Args::None,
+        _ => return Err(STATUS_UNKNOWN_TRANSACTION),
+    };
+    enforce_no_data_avail(input)?;
+    Ok(args)
 }
 
 pub unsafe extern "C" fn on_transact(
-    _binder: *mut AIBinder,
-    code: TransactionCode,
-    in_parcel: *const AParcel,
-    out_parcel: *mut AParcel,
-) -> BinderStatus {
-    let res = match code {
-        1 => i32_method(out_parcel, core::get_eng_version()),
-        2 => string_method(out_parcel, core::get_force_reboot()),
-        3 => i32_method(out_parcel, core::get_ftmmode()),
-        4 => string_method(out_parcel, core::get_hungtask()),
-        5 => string_method(out_parcel, core::get_mt_gpio()),
-        6 => string_method(out_parcel, core::get_ocp()),
-        7 => string_method(out_parcel, core::get_opboot()),
-        8 => i32_method(out_parcel, core::get_operator_name()),
-        9 => match read_i32(in_parcel) {
-            Ok(arg0) => string_method(out_parcel, core::get_oplusocp_status(arg0)),
-            Err(rc) => Err(rc),
-        },
-        10 => match read_i32(in_parcel) {
-            Ok(arg0) => string_method(out_parcel, core::get_opluspoff_reason(arg0)),
-            Err(rc) => Err(rc),
-        },
-        11 => match read_i32(in_parcel) {
-            Ok(arg0) => string_method(out_parcel, core::get_opluspon_reason(arg0)),
-            Err(rc) => Err(rc),
-        },
-        12 => i32_method(out_parcel, core::get_pcb_version()),
-        13 => string_method(out_parcel, core::get_phoenix()),
-        14 => string_method(out_parcel, core::get_pmic_info()),
-        15 => string_method(out_parcel, core::get_poff_reason()),
-        16 => string_method(out_parcel, core::get_pon_reason()),
-        17 => i32_method(out_parcel, core::get_project()),
-        18 => i32_method(out_parcel, core::get_rf_type()),
-        19 => i32_method(out_parcel, core::get_sau()),
-        20 => string_method(out_parcel, core::get_serial_id()),
-        21 => string_method(out_parcel, core::get_shutdown_detect()),
-        22 => bool_method(out_parcel, core::is_ufs_devices()),
-        23 => string_method(out_parcel, core::misc_module2_load()),
-        24 => string_method(out_parcel, core::misc_module_blocklist()),
-        25 => string_method(out_parcel, core::misc_read_linked_modules()),
-        26 => match read_i32(in_parcel) {
-            Ok(arg0) => i32_array_method(out_parcel, core::read_aging_data(arg0)),
-            Err(rc) => Err(rc),
-        },
-        27 => match read_i32(in_parcel) {
-            Ok(arg0) => string_method(out_parcel, core::read_theia_node(arg0)),
-            Err(rc) => Err(rc),
-        },
-        28 => save_aging_data(in_parcel, out_parcel),
-        29 => match read_string(in_parcel) {
-            Ok(arg0) => bool_method(out_parcel, core::set_opboot(&arg0)),
-            Err(rc) => Err(rc),
-        },
-        30 => match read_string(in_parcel) {
-            Ok(arg0) => bool_method(out_parcel, core::set_phoenix(&arg0)),
-            Err(rc) => Err(rc),
-        },
-        31 => match read_string(in_parcel) {
-            Ok(arg0) => bool_method(out_parcel, core::set_shutdown_detect(&arg0)),
-            Err(rc) => Err(rc),
-        },
-        32 => match (read_i32(in_parcel), read_string(in_parcel)) {
-            (Ok(arg0), Ok(arg1)) => bool_method(out_parcel, core::write_theia_node(arg0, &arg1)),
-            (_, Err(rc)) | (Err(rc), _) => Err(rc),
-        },
-        33 => string_method(out_parcel, core::get_dram_freq()),
-        TRANSACTION_GET_INTERFACE_VERSION => i32_method(out_parcel, INTERFACE_VERSION),
-        TRANSACTION_GET_INTERFACE_HASH => string_method(out_parcel, INTERFACE_HASH.to_string()),
-        _ => {
-            // Codes outside the interface return UNKNOWN_TRANSACTION; clients
-            // use it to walk the interface chain.
-            return -31;
-        }
-    };
+    binder: *mut AIBinder,
+    code: u32,
+    input: *const AParcel,
+    output: *mut AParcel,
+) -> i32 {
+    dispatch(binder, code, input, output)
+        .err()
+        .unwrap_or(STATUS_OK)
+}
 
-    match res {
-        Ok(()) => STATUS_OK,
-        Err(rc) => rc,
+unsafe fn dispatch(
+    binder: *mut AIBinder,
+    code: u32,
+    input: *const AParcel,
+    out: *mut AParcel,
+) -> Result<(), i32> {
+    let args = decode(code, input)?;
+    if code == TRANSACTION_GET_INTERFACE_VERSION {
+        return int_reply(out, Ok(INTERFACE_VERSION));
+    }
+    if code == TRANSACTION_GET_INTERFACE_HASH {
+        return string_reply(out, Ok(INTERFACE_HASH.to_owned()));
+    }
+    let data = AIBinder_getUserData(binder);
+    if data.is_null() {
+        return Err(STATUS_UNEXPECTED_NULL);
+    }
+    let project = &*data.cast::<Project>();
+    let uid = AIBinder_getCallingUid();
+    match (code, args) {
+        (1, Args::None) => int_reply(out, project.identity(IdentityField::Engineering)),
+        (2, Args::None) => string_reply(out, core::read_native("/proc/force_reboot")),
+        (3, Args::None) => int_reply(out, core::read_native_int("/sys/systeminfo/ftmmode")),
+        (4, Args::None) => string_reply(out, core::read_native("/proc/sys/kernel/hung_task_kill")),
+        (5, Args::None) => string_reply(
+            out,
+            core::read_native("/sys/devices/platform/pinctrl/mt_gpio"),
+        ),
+        (6, Args::None) => string_reply(out, core::read_native("/proc/oplusVersion/ocp")),
+        (7, Args::None) => string_reply(out, core::read_native("/proc/opbootfrom")),
+        (8, Args::None) => int_reply(out, project.identity(IdentityField::Operator)),
+        (9, Args::Int(id)) => string_reply(out, core::read_pmic("/sys/pmic_info/ocp_status", id)),
+        (10, Args::Int(id)) => string_reply(out, core::read_pmic("/sys/pmic_info/poff_reason", id)),
+        (11, Args::Int(id)) => string_reply(out, core::read_pmic("/sys/pmic_info/pon_reason", id)),
+        (12, Args::None) => int_reply(out, project.identity(IdentityField::Pcb)),
+        (13, Args::None) => string_reply(out, core::read_native("/proc/phoenix")),
+        (14, Args::None) => string_reply(out, core::read_native("/sys/pmic_info/pmic_monitor")),
+        (15, Args::None) => string_reply(out, core::read_native("/sys/power/poff_reason")),
+        (16, Args::None) => string_reply(out, core::read_native("/sys/power/pon_reason")),
+        (17, Args::None) => int_reply(out, project.identity(IdentityField::Project)),
+        (18, Args::None) => int_reply(out, project.identity(IdentityField::Rf)),
+        (19, Args::None) => int_reply(out, core::read_native_int("/proc/sau_pwknum")),
+        (20, Args::None) => string_reply(out, core::get_serial_id(uid)),
+        (21, Args::None) => string_reply(out, core::read_native("/proc/shutdown_detect")),
+        (22, Args::None) => bool_reply(out, core::is_ufs_devices()),
+        (23, Args::None) => {
+            string_reply(out, core::read_native("/vendor/lib/modules/modules.load"))
+        }
+        (24, Args::None) => string_reply(
+            out,
+            core::read_native("/vendor/lib/modules/modules.blocklist"),
+        ),
+        (25, Args::None) => string_reply(out, core::read_native("/proc/modules")),
+        (26, Args::Int(_)) => error_reply(out, Error::Unsupported),
+        (27, Args::Int(id)) => string_reply(out, core::read_theia_node(id)),
+        (28, Args::Aging(selector, data, length)) => {
+            if selector < 0 || length < 0 || length as usize != data.len() {
+                return error_reply(out, Error::InvalidArgument);
+            }
+            bool_reply(out, core::unsupported_mutation(uid))
+        }
+        (29..=31 | 35, Args::Text(_text)) => bool_reply(out, core::unsupported_mutation(uid)),
+        (32, Args::Theia(_id, _text)) => bool_reply(out, core::unsupported_mutation(uid)),
+        (33, Args::None) => string_reply(
+            out,
+            core::read_native("/sys/class/devfreq/mtk-dvfsrc-devfreq/cur_freq"),
+        ),
+        (34, Args::None) => error_reply(out, Error::Unsupported),
+        _ => Err(STATUS_BAD_VALUE),
     }
 }
 
-fn i32_method(out: *mut AParcel, value: i32) -> Result<(), BinderStatus> {
-    write_ok_status(out)?;
-    write_i32(out, value)
+fn error_reply(out: *mut AParcel, error: Error) -> Result<(), i32> {
+    write_exception(
+        out,
+        match error {
+            Error::Unsupported => -7,      // EX_UNSUPPORTED_OPERATION
+            Error::PermissionDenied => -1, // EX_SECURITY
+            Error::InvalidArgument => -3,  // EX_ILLEGAL_ARGUMENT
+        },
+    )
 }
 
-fn string_method(out: *mut AParcel, value: String) -> Result<(), BinderStatus> {
-    write_ok_status(out)?;
-    write_string(out, &value)
+fn int_reply(out: *mut AParcel, value: Result<i32, Error>) -> Result<(), i32> {
+    match value {
+        Ok(v) => {
+            write_ok_status(out)?;
+            write_i32(out, v)
+        }
+        Err(e) => error_reply(out, e),
+    }
 }
-
-fn bool_method(out: *mut AParcel, value: bool) -> Result<(), BinderStatus> {
-    write_ok_status(out)?;
-    write_bool(out, value)
+fn string_reply(out: *mut AParcel, value: Result<String, Error>) -> Result<(), i32> {
+    match value {
+        Ok(v) => {
+            write_ok_status(out)?;
+            write_string(out, &v)
+        }
+        Err(e) => error_reply(out, e),
+    }
 }
-
-fn i32_array_method(out: *mut AParcel, values: Vec<i32>) -> Result<(), BinderStatus> {
-    write_ok_status(out)?;
-    write_i32_array(out, &values)
-}
-
-fn save_aging_data(in_parcel: *const AParcel, out: *mut AParcel) -> Result<(), BinderStatus> {
-    let arg0 = read_i32(in_parcel)?;
-    let arg1 = read_i32_array(in_parcel)?;
-    let arg2 = read_i32(in_parcel)?;
-    bool_method(out, core::save_aging_data(arg0, &arg1, arg2))
+fn bool_reply(out: *mut AParcel, value: Result<bool, Error>) -> Result<(), i32> {
+    match value {
+        Ok(v) => {
+            write_ok_status(out)?;
+            write_bool(out, v)
+        }
+        Err(e) => error_reply(out, e),
+    }
 }

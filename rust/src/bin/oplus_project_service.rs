@@ -7,21 +7,22 @@
 //   status = AServiceManager_addService(binder, name);
 //   ABinderProcess_joinThreadPool();
 //
-// The log tag is "OplusStabilityHAL". OPLUS_PROJECT_INSTANCE overrides the
+// OPLUS_PROJECT_INSTANCE overrides the
 // instance suffix; empty or unset keeps "/default".
 
-#[path = "../wire.rs"]
-mod wire;
 #[path = "../hal.rs"]
 mod hal;
+#[path = "../wire.rs"]
+mod wire;
 
 use std::ffi::CString;
 use std::os::raw::c_char;
 
 use hal::{on_create, on_destroy, on_transact, DESCRIPTOR, LOG_TAG};
 use wire::{
-    log, AIBinder_Class_define, AIBinder_new, ABinderProcess_joinThreadPool,
-    ABinderProcess_startThreadPool, AServiceManager_addService, LOG_LEVEL_ERROR, LOG_LEVEL_INFO,
+    log, ABinderProcess_joinThreadPool, ABinderProcess_startThreadPool, AIBinder_Class_define,
+    AIBinder_markVintfStability, AIBinder_new, AServiceManager_addService, LOG_LEVEL_ERROR,
+    LOG_LEVEL_INFO,
 };
 
 fn main() {
@@ -51,8 +52,27 @@ fn main() {
         std::process::exit(1);
     }
 
+    // The manual transport does not process @VintfStability automatically.
+    unsafe { AIBinder_markVintfStability(binder) };
+
     let suffix = std::env::var("OPLUS_PROJECT_INSTANCE").unwrap_or_default();
-    let name = format!("{}/{}", DESCRIPTOR, if suffix.is_empty() { "default" } else { &suffix });
+    if suffix.len() > 64
+        || !suffix
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
+    {
+        log(LOG_LEVEL_ERROR, LOG_TAG, "invalid instance suffix");
+        std::process::exit(1);
+    }
+    let name = format!(
+        "{}/{}",
+        DESCRIPTOR,
+        if suffix.is_empty() {
+            "default"
+        } else {
+            &suffix
+        }
+    );
     let instance = CString::new(name.clone()).unwrap();
     // SAFETY: binder is a live AIBinder we own; instance is NUL-terminated.
     let status = unsafe { AServiceManager_addService(binder, instance.as_ptr() as *const c_char) };

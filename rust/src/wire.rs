@@ -1,23 +1,11 @@
-// Raw FFI to libbinder_ndk (the stable C API) and parcel helpers.
-//
-// The AIDL transport binds that C API directly: the interface is fixed
-// (vendor.oplus.hardware.stability.oplus_project.IOplusProject, version 1,
-// hash 87177176cb812e29538fd78965a31f1f545d2baa, 33 methods numbered 1..33
-// plus the reserved getInterfaceVersion@0xffffff and getInterfaceHash@0xfffffe
-// transactions), so the wire format is fully known.
-//
-// Wire format:
-//   * incoming transactions arrive with the interface token already consumed,
-//   * every reply starts with a status header (an int32 exception code, 0 for
-//     OK) followed by the return value in declaration order,
-//   * strings are int32 length (UTF-8 bytes, -1 for null) + bytes + NUL;
-//     int arrays are int32 length followed by the elements.
-
+// Real libbinder_ndk C APIs handle tokens, status headers and UTF-16 transport.
 #![allow(dead_code)]
 
+use oplus_project_service::protocol::{checked_length, consumed, MAX_INT_ARRAY, MAX_STRING_BYTES};
+pub use oplus_project_service::protocol::{
+    STATUS_BAD_VALUE, STATUS_UNEXPECTED_NULL, STATUS_UNKNOWN_TRANSACTION,
+};
 use std::ffi::{c_char, c_void, CString};
-use std::os::raw::c_int;
-use std::ptr;
 
 #[repr(C)]
 pub struct AIBinder {
@@ -35,337 +23,239 @@ pub struct AParcel {
 pub struct AStatus {
     _private: [u8; 0],
 }
-
-pub type BinderStatus = c_int;
+pub type BinderStatus = i32;
 pub type TransactionCode = u32;
-
-pub const STATUS_OK: BinderStatus = 0;
-
-pub const TRANSACTION_GET_INTERFACE_VERSION: TransactionCode = 16777215;
-pub const TRANSACTION_GET_INTERFACE_HASH: TransactionCode = 16777214;
-
-pub const LOG_LEVEL_INFO: c_int = 4;
-pub const LOG_LEVEL_ERROR: c_int = 6;
-
-pub type OnCreate = unsafe extern "C" fn(args: *mut c_void) -> *mut c_void;
-pub type OnDestroy = unsafe extern "C" fn(user_data: *mut c_void);
-pub type OnTransact = unsafe extern "C" fn(
-    binder: *mut AIBinder,
-    code: TransactionCode,
-    in_parcel: *const AParcel,
-    out_parcel: *mut AParcel,
-) -> BinderStatus;
+pub const STATUS_OK: i32 = 0;
+pub const STATUS_NO_MEMORY: i32 = -12;
+pub const TRANSACTION_GET_INTERFACE_VERSION: u32 = 0xffffff;
+pub const TRANSACTION_GET_INTERFACE_HASH: u32 = 0xfffffe;
+pub const LOG_LEVEL_INFO: i32 = 4;
+pub const LOG_LEVEL_ERROR: i32 = 6;
+pub type OnCreate = unsafe extern "C" fn(*mut c_void) -> *mut c_void;
+pub type OnDestroy = unsafe extern "C" fn(*mut c_void);
+pub type OnTransact = unsafe extern "C" fn(*mut AIBinder, u32, *const AParcel, *mut AParcel) -> i32;
 
 extern "C" {
-    // android/binder_ibinder.h
     pub fn AIBinder_Class_define(
-        interface_descriptor: *const c_char,
-        on_create: OnCreate,
-        on_destroy: OnDestroy,
-        on_transact: OnTransact,
+        descriptor: *const c_char,
+        create: OnCreate,
+        destroy: OnDestroy,
+        transact: OnTransact,
     ) -> *mut AIBinder_Class;
-    pub fn AIBinder_new(class: *mut AIBinder_Class, args: *mut c_void) -> *mut AIBinder;
-
-    // android/binder_manager.h (platform header)
-    pub fn AServiceManager_addService(
-        binder: *mut AIBinder,
-        instance: *const c_char,
-    ) -> BinderStatus;
-
-    // android/binder_process.h (platform header)
+    pub fn AIBinder_new(class: *const AIBinder_Class, args: *mut c_void) -> *mut AIBinder;
+    pub fn AIBinder_getUserData(binder: *mut AIBinder) -> *mut c_void;
+    pub fn AIBinder_getCallingUid() -> u32;
+    pub fn AIBinder_markVintfStability(binder: *mut AIBinder);
+    pub fn AServiceManager_addService(binder: *mut AIBinder, instance: *const c_char) -> i32;
     pub fn ABinderProcess_startThreadPool();
     pub fn ABinderProcess_joinThreadPool();
-
-    // android/binder_parcel.h
-    pub fn AParcel_writeInt32(parcel: *mut AParcel, value: i32) -> BinderStatus;
-    pub fn AParcel_readInt32(parcel: *const AParcel, value: *mut i32) -> BinderStatus;
-    pub fn AParcel_writeBool(parcel: *mut AParcel, value: bool) -> BinderStatus;
-    pub fn AParcel_readBool(parcel: *const AParcel, value: *mut bool) -> BinderStatus;
-    pub fn AParcel_writeString(
-        parcel: *mut AParcel,
-        string: *const c_char,
-        length: i32,
-    ) -> BinderStatus;
-    pub fn AParcel_readString(
+    fn AParcel_writeInt32(parcel: *mut AParcel, value: i32) -> i32;
+    fn AParcel_readInt32(parcel: *const AParcel, value: *mut i32) -> i32;
+    fn AParcel_writeBool(parcel: *mut AParcel, value: bool) -> i32;
+    fn AParcel_writeString(parcel: *mut AParcel, value: *const c_char, length: i32) -> i32;
+    fn AParcel_readString(
         parcel: *const AParcel,
-        string_data: *mut c_void,
+        data: *mut c_void,
         allocator: Option<unsafe extern "C" fn(*mut c_void, i32, *mut *mut c_char) -> bool>,
-    ) -> BinderStatus;
-    pub fn AParcel_readInt32Array(
+    ) -> i32;
+    fn AParcel_readInt32Array(
         parcel: *const AParcel,
-        array_data: *mut c_void,
+        data: *mut c_void,
         allocator: Option<unsafe extern "C" fn(*mut c_void, i32, *mut *mut i32) -> bool>,
-    ) -> BinderStatus;
-    pub fn AParcel_writeInt32Array(
-        parcel: *mut AParcel,
-        array_data: *const i32,
-        length: i32,
-    ) -> BinderStatus;
-    pub fn AParcel_writeStatusHeader(parcel: *mut AParcel, status: *const AStatus) -> BinderStatus;
-
-    // android/binder_status.h
-    pub fn AStatus_newOk() -> *mut AStatus;
-    pub fn AStatus_delete(status: *mut AStatus);
-
-    // android/log.h
-    pub fn __android_log_print(prio: c_int, tag: *const c_char, fmt: *const c_char, ...) -> c_int;
+    ) -> i32;
+    fn AParcel_writeInt32Array(parcel: *mut AParcel, values: *const i32, length: i32) -> i32;
+    fn AParcel_getDataPosition(parcel: *const AParcel) -> i32;
+    fn AParcel_getDataSize(parcel: *const AParcel) -> i32;
+    fn AParcel_writeStatusHeader(parcel: *mut AParcel, status: *const AStatus) -> i32;
+    fn AStatus_newOk() -> *mut AStatus;
+    fn AStatus_fromExceptionCode(exception: i32) -> *mut AStatus;
+    fn AStatus_delete(status: *mut AStatus);
+    fn __android_log_print(priority: i32, tag: *const c_char, format: *const c_char, ...) -> i32;
 }
 
-pub fn log(level: c_int, tag: &str, msg: &str) {
-    let tag = match CString::new(tag) {
-        Ok(t) => t,
-        Err(_) => return,
-    };
-    let fmt = CString::new("%s").unwrap();
-    let msg = match CString::new(msg) {
-        Ok(m) => m,
-        Err(_) => return,
-    };
-    // SAFETY: all three strings are valid NUL-terminated C strings.
-    unsafe {
-        __android_log_print(level, tag.as_ptr(), fmt.as_ptr(), msg.as_ptr());
-    }
-}
-
-// Write helpers.
-
-pub fn write_ok_status(out: *mut AParcel) -> Result<(), BinderStatus> {
-    // SAFETY: out is a valid reply parcel from onTransact.
-    let status = unsafe { AStatus_newOk() };
-    if status.is_null() {
-        return Err(STATUS_OK - 1);
-    }
-    let rc = unsafe { AParcel_writeStatusHeader(out, status) };
-    unsafe { AStatus_delete(status) };
-    if rc == STATUS_OK {
+fn check(status: i32) -> Result<(), i32> {
+    if status == 0 {
         Ok(())
     } else {
-        Err(rc)
+        Err(status)
     }
 }
 
-pub fn write_i32(out: *mut AParcel, value: i32) -> Result<(), BinderStatus> {
-    // SAFETY: out is a valid reply parcel.
-    let rc = unsafe { AParcel_writeInt32(out, value) };
-    if rc == STATUS_OK {
-        Ok(())
-    } else {
-        Err(rc)
-    }
-}
-
-pub fn write_bool(out: *mut AParcel, value: bool) -> Result<(), BinderStatus> {
-    // SAFETY: out is a valid reply parcel.
-    let rc = unsafe { AParcel_writeBool(out, value) };
-    if rc == STATUS_OK {
-        Ok(())
-    } else {
-        Err(rc)
-    }
-}
-
-pub fn write_string(out: *mut AParcel, value: &str) -> Result<(), BinderStatus> {
-    let cstr = match CString::new(value) {
-        Ok(c) => c,
-        Err(_) => return Err(-22), // STATUS_BAD_VALUE
-    };
-    // SAFETY: out is a valid reply parcel; cstr is NUL-terminated and its
-    // length is passed explicitly as the UTF-8 byte count.
-    let rc = unsafe { AParcel_writeString(out, cstr.as_ptr(), cstr.as_bytes().len() as i32) };
-    if rc == STATUS_OK {
-        Ok(())
-    } else {
-        Err(rc)
-    }
-}
-
-pub fn write_i32_array(out: *mut AParcel, values: &[i32]) -> Result<(), BinderStatus> {
-    // SAFETY: out is a valid reply parcel; a non-empty slice has a valid
-    // pointer for the whole length, an empty one passes a null-dangling
-    // pointer with length 0 as the AIDL format requires.
-    let rc = unsafe {
-        AParcel_writeInt32Array(
-            out,
-            if values.is_empty() {
-                ptr::null()
-            } else {
-                values.as_ptr()
-            },
-            values.len() as i32,
-        )
-    };
-    if rc == STATUS_OK {
-        Ok(())
-    } else {
-        Err(rc)
-    }
-}
-
-// Read helpers.
-
-pub fn read_i32(in_parcel: *const AParcel) -> Result<i32, BinderStatus> {
-    let mut value: i32 = 0;
-    // SAFETY: in_parcel is a valid incoming data parcel; &mut value is a
-    // writable i32.
-    let rc = unsafe { AParcel_readInt32(in_parcel, &mut value) };
-    if rc == STATUS_OK {
-        Ok(value)
-    } else {
-        Err(rc)
-    }
-}
-
-pub fn read_bool(in_parcel: *const AParcel) -> Result<bool, BinderStatus> {
-    let mut value: bool = false;
-    // SAFETY: as above with a bool.
-    let rc = unsafe { AParcel_readBool(in_parcel, &mut value) };
-    if rc == STATUS_OK {
-        Ok(value)
-    } else {
-        Err(rc)
-    }
-}
-
-/// Reads a String in the AIDL format and drops the trailing NUL.
-pub fn read_string(in_parcel: *const AParcel) -> Result<String, BinderStatus> {
-    let mut ctx = StringCtx {
-        buf: ptr::null_mut(),
-        layout: std::alloc::Layout::new::<u8>(),
-    };
-    // SAFETY: in_parcel is a valid incoming data parcel. The allocator
-    // callback leases a buffer that libbinder fills with the string, and the
-    // StringCtx Drop frees it when the ctx goes out of scope.
-    let rc = unsafe {
-        AParcel_readString(
-            in_parcel,
-            &mut ctx as *mut StringCtx as *mut c_void,
-            Some(string_allocator),
-        )
-    };
-    if rc != STATUS_OK {
-        return Err(rc);
-    }
-    if ctx.buf.is_null() {
-        // A null string in the parcel reads as empty.
-        return Ok(String::new());
-    }
-    // SAFETY: buf holds layout.size() bytes with the string and its NUL
-    // terminator written by libbinder inside them.
-    let bytes = unsafe { std::slice::from_raw_parts(ctx.buf, ctx.layout.size()) };
-    let end = bytes.iter().position(|&b| b == 0).unwrap_or(bytes.len());
-    Ok(String::from_utf8_lossy(&bytes[..end]).into_owned())
-}
-
-pub fn read_i32_array(in_parcel: *const AParcel) -> Result<Vec<i32>, BinderStatus> {
-    let mut ctx = Int32ArrayCtx {
-        buf: ptr::null_mut(),
-        layout: std::alloc::Layout::new::<i32>(),
-    };
-    // SAFETY: as with read_string, with i32 elements.
-    let rc = unsafe {
-        AParcel_readInt32Array(
-            in_parcel,
-            &mut ctx as *mut Int32ArrayCtx as *mut c_void,
-            Some(i32_array_allocator),
-        )
-    };
-    if rc != STATUS_OK {
-        return Err(rc);
-    }
-    if ctx.buf.is_null() {
-        // A null or empty array in the parcel reads as empty.
-        return Ok(Vec::new());
-    }
-    // SAFETY: buf holds layout.size() bytes of i32s written by libbinder.
-    let values = unsafe { std::slice::from_raw_parts(ctx.buf, ctx.layout.size() / 4) };
-    Ok(values.to_vec())
-}
-
-/// A binder transaction is capped at 1 MiB, so no larger string is legitimate.
-const MAX_PARCEL_STRING: usize = 1 << 20;
-
-struct StringCtx {
-    buf: *mut u8,
-    layout: std::alloc::Layout,
-}
-
-impl Drop for StringCtx {
-    fn drop(&mut self) {
-        if !self.buf.is_null() {
-            // SAFETY: buf was allocated with exactly this layout.
-            unsafe { std::alloc::dealloc(self.buf, self.layout) };
+pub fn log(priority: i32, tag: &str, message: &str) {
+    if let (Ok(tag), Ok(message)) = (CString::new(tag), CString::new(message)) {
+        unsafe {
+            __android_log_print(priority, tag.as_ptr(), c"%s".as_ptr(), message.as_ptr());
         }
     }
+}
+
+pub fn enforce_no_data_avail(parcel: *const AParcel) -> Result<(), i32> {
+    consumed(unsafe { AParcel_getDataPosition(parcel) }, unsafe {
+        AParcel_getDataSize(parcel)
+    })
+}
+
+fn write_status(out: *mut AParcel, exception: Option<i32>) -> Result<(), i32> {
+    let status = unsafe {
+        match exception {
+            Some(e) => AStatus_fromExceptionCode(e),
+            None => AStatus_newOk(),
+        }
+    };
+    if status.is_null() {
+        return Err(STATUS_NO_MEMORY);
+    }
+    let result = unsafe { AParcel_writeStatusHeader(out, status) };
+    unsafe { AStatus_delete(status) };
+    check(result)
+}
+
+pub fn write_ok_status(out: *mut AParcel) -> Result<(), i32> {
+    write_status(out, None)
+}
+pub fn write_exception(out: *mut AParcel, exception: i32) -> Result<(), i32> {
+    write_status(out, Some(exception))
+}
+pub fn write_i32(out: *mut AParcel, value: i32) -> Result<(), i32> {
+    check(unsafe { AParcel_writeInt32(out, value) })
+}
+pub fn write_bool(out: *mut AParcel, value: bool) -> Result<(), i32> {
+    check(unsafe { AParcel_writeBool(out, value) })
+}
+
+pub fn write_string(out: *mut AParcel, value: &str) -> Result<(), i32> {
+    if value.len() > MAX_STRING_BYTES {
+        return Err(STATUS_BAD_VALUE);
+    }
+    let value = CString::new(value).map_err(|_| STATUS_BAD_VALUE)?;
+    check(unsafe { AParcel_writeString(out, value.as_ptr(), value.as_bytes().len() as i32) })
+}
+
+pub fn write_i32_array(out: *mut AParcel, values: &[i32]) -> Result<(), i32> {
+    if values.len() > MAX_INT_ARRAY {
+        return Err(STATUS_BAD_VALUE);
+    }
+    check(unsafe { AParcel_writeInt32Array(out, values.as_ptr(), values.len() as i32) })
+}
+
+pub fn read_i32(parcel: *const AParcel) -> Result<i32, i32> {
+    let mut value = 0;
+    check(unsafe { AParcel_readInt32(parcel, &mut value) })?;
+    Ok(value)
+}
+
+#[derive(Default)]
+struct StringCtx {
+    bytes: Vec<u8>,
+    null: bool,
+    error: Option<i32>,
 }
 
 unsafe extern "C" fn string_allocator(
     data: *mut c_void,
     length: i32,
-    buffer: *mut *mut c_char,
+    out: *mut *mut c_char,
 ) -> bool {
-    let ctx = &mut *(data as *mut StringCtx);
-    // AParcel_stringAllocator contract (binder_parcel.h): length includes the
-    // NUL terminator, and -1 means a null string, which succeeds with no
-    // buffer. 0 is documented as never sent; treat it the same way.
-    if length <= 0 {
-        return true;
-    }
-    if (length as usize) > MAX_PARCEL_STRING {
-        return false;
-    }
-    let layout = match std::alloc::Layout::from_size_align(length as usize, 1) {
-        Ok(l) => l,
-        Err(_) => return false,
-    };
-    let p = std::alloc::alloc(layout);
-    if p.is_null() {
-        return false;
-    }
-    ctx.buf = p;
-    ctx.layout = layout;
-    *buffer = p as *mut c_char;
-    true
-}
-
-const MAX_PARCEL_INT32_ARRAY: usize = 1 << 18; // 1 MiB of i32 elements
-
-struct Int32ArrayCtx {
-    buf: *mut i32,
-    layout: std::alloc::Layout,
-}
-
-impl Drop for Int32ArrayCtx {
-    fn drop(&mut self) {
-        if !self.buf.is_null() {
-            // SAFETY: buf was allocated with exactly this layout.
-            unsafe { std::alloc::dealloc(self.buf as *mut u8, self.layout) };
+    let ctx = &mut *data.cast::<StringCtx>();
+    match checked_length(length, MAX_STRING_BYTES + 1, true) {
+        Ok(None) => {
+            ctx.null = true;
+            // NDK passes no output-buffer pointer for a null value.
+            true
+        }
+        Ok(Some(length)) => {
+            if out.is_null() {
+                ctx.error = Some(STATUS_BAD_VALUE);
+                return false;
+            }
+            if ctx.bytes.try_reserve_exact(length).is_err() {
+                ctx.error = Some(STATUS_NO_MEMORY);
+                return false;
+            }
+            ctx.bytes.resize(length, 0);
+            *out = ctx.bytes.as_mut_ptr().cast();
+            true
+        }
+        Err(error) => {
+            ctx.error = Some(error);
+            false
         }
     }
 }
 
-unsafe extern "C" fn i32_array_allocator(
-    data: *mut c_void,
-    length: i32,
-    buffer: *mut *mut i32,
-) -> bool {
-    let ctx = &mut *(data as *mut Int32ArrayCtx);
-    // AParcel_int32ArrayAllocator: -1 means a null array, no buffer needed.
-    if length <= 0 {
-        return true;
-    }
-    if (length as usize) > MAX_PARCEL_INT32_ARRAY {
-        return false;
-    }
-    let layout = match std::alloc::Layout::array::<i32>(length as usize) {
-        Ok(l) => l,
-        Err(_) => return false,
+pub fn read_string(parcel: *const AParcel) -> Result<String, i32> {
+    let mut ctx = StringCtx::default();
+    let status = unsafe {
+        AParcel_readString(
+            parcel,
+            (&mut ctx as *mut StringCtx).cast(),
+            Some(string_allocator),
+        )
     };
-    let p = std::alloc::alloc(layout) as *mut i32;
-    if p.is_null() {
-        return false;
+    if let Some(error) = ctx.error {
+        return Err(error);
     }
-    ctx.buf = p;
-    ctx.layout = layout;
-    *buffer = p;
-    true
+    check(status)?;
+    if ctx.null {
+        return Err(STATUS_UNEXPECTED_NULL);
+    }
+    if ctx.bytes.pop() != Some(0) || ctx.bytes.contains(&0) {
+        return Err(STATUS_BAD_VALUE);
+    }
+    String::from_utf8(ctx.bytes).map_err(|_| STATUS_BAD_VALUE)
+}
+
+#[derive(Default)]
+struct ArrayCtx {
+    values: Vec<i32>,
+    null: bool,
+    error: Option<i32>,
+}
+
+unsafe extern "C" fn array_allocator(data: *mut c_void, length: i32, out: *mut *mut i32) -> bool {
+    let ctx = &mut *data.cast::<ArrayCtx>();
+    match checked_length(length, MAX_INT_ARRAY, false) {
+        Ok(None) => {
+            ctx.null = true;
+            true
+        }
+        Ok(Some(length)) => {
+            if length != 0 && out.is_null() {
+                ctx.error = Some(STATUS_BAD_VALUE);
+                return false;
+            }
+            if ctx.values.try_reserve_exact(length).is_err() {
+                ctx.error = Some(STATUS_NO_MEMORY);
+                return false;
+            }
+            ctx.values.resize(length, 0);
+            if !out.is_null() {
+                *out = ctx.values.as_mut_ptr();
+            }
+            true
+        }
+        Err(error) => {
+            ctx.error = Some(error);
+            false
+        }
+    }
+}
+
+pub fn read_i32_array(parcel: *const AParcel) -> Result<Vec<i32>, i32> {
+    let mut ctx = ArrayCtx::default();
+    let status = unsafe {
+        AParcel_readInt32Array(
+            parcel,
+            (&mut ctx as *mut ArrayCtx).cast(),
+            Some(array_allocator),
+        )
+    };
+    if let Some(error) = ctx.error {
+        return Err(error);
+    }
+    check(status)?;
+    if ctx.null {
+        return Err(STATUS_UNEXPECTED_NULL);
+    }
+    Ok(ctx.values)
 }

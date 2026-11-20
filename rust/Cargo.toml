@@ -1,7 +1,8 @@
 [package]
 name = "oplus-project-service"
-version = "1.0.0"
+version = "3.0.0"
 edition = "2021"
+rust-version = "1.95"
 
 # lib: the node adapters (host-testable core).
 [lib]
@@ -13,6 +14,8 @@ path = "src/lib.rs"
 [[bin]]
 name = "oplus_project_service"
 path = "src/bin/oplus_project_service.rs"
+test = false
+bench = false
 
 [profile.release]
 opt-level = 2

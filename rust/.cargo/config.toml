@@ -1,10 +1,15 @@
 # Cross-build settings for the aarch64 Android target.
 #
 # The platform libbinder_ndk.so link argument is supplied by
-# scripts/build_rust.sh through RUSTFLAGS: that library comes from the Android
+# rust/build.rs: that library comes from the Android
 # tree being built against and has no portable path.
 [target.aarch64-linux-android]
 linker = "aarch64-linux-android35-clang"
+rustflags = [
+    "-C", "link-arg=-Wl,--no-undefined",
+    "-C", "link-arg=-Wl,-z,relro,-z,now",
+    "-C", "link-arg=-Wl,--build-id=none",
+]
 
 [build]
 target-dir = "target"

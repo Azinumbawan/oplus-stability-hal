@@ -1,5 +1,4 @@
-# Pinned toolchain for reproducible builds of the service.
+# Use the already installed stable toolchain; do not auto-install Android targets.
 [toolchain]
-channel = "1.99.1"
+channel = "stable"
 profile = "minimal"
-targets = ["aarch64-linux-android"]

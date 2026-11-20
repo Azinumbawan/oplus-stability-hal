@@ -1,5 +1,5 @@
 // Method order is load-bearing: AIDL assigns transaction codes by declaration
-// order (1..33 here). Do not reorder or insert methods; that would break wire
+// order (1..35, ColorOS V3). Do not reorder or insert methods; that would break wire
 // compatibility with existing clients.
 package vendor.oplus.hardware.stability.oplus_project;
 
@@ -38,4 +38,6 @@ interface IOplusProject {
     boolean set_shutdown_detect(in String arg0);
     boolean write_theia_node(in int arg0, in String arg1);
     String get_dram_freq();
+    String read_op1_record_info();
+    boolean write_op1_record_info(in String op1_logs_data);
 }
